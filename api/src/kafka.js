@@ -60,4 +60,4 @@ const callConsumer = async (consumer, topic) => {
   });
 };
 
-export default { callProducer, callConsumer };
+export { callProducer, callConsumer };

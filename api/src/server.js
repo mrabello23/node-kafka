@@ -1,7 +1,6 @@
 import nanoexpress from "nanoexpress";
 import { Kafka, logLevel } from "kafkajs";
-
-import { routes } from "./routes";
+import { callProducer, callConsumer } from "./kafka.js";
 
 const kafka = new Kafka({
   clientId: "kafka-services",
@@ -11,7 +10,7 @@ const kafka = new Kafka({
   retry: {
     initialRetryTime: 300, // ms
     maxRetryTime: 30000, // ms
-    retries: 5,
+    retries: 10,
   },
   logLevel: logLevel.INFO,
 });
@@ -21,20 +20,42 @@ const producer = kafka.producer({
 });
 
 const consumer = kafka.consumer({
-  groupId: groupId, // must be unique group id within the cluster
+  groupId: "api-node", // must be unique group id within the cluster
 });
 
 const app = nanoexpress();
 
-app.use((req, res, next) => {
-  req.producer = producer;
-  return next();
+app.get("/", (req, res) => {
+  return res.send({ status: "ok" });
 });
 
-app.use(routes);
+app.post("/produce-service1", async (req, res) => {
+  const topic = req.body.topic || "topic-service1";
+
+  await callProducer(req.producer, topic, [
+    {
+      value: JSON.stringify({
+        success: true,
+        message: "Hello world kafka!",
+        id: 1234,
+        origin: 7766,
+      }),
+    },
+    {
+      value: JSON.stringify({
+        success: true,
+        message: "Producer for service 1",
+        id: 4321,
+        origin: 9988,
+      }),
+    },
+  ]);
+
+  return res.send({ message: "Called producer for service 1" });
+});
 
 const run = async () => {
-  await callConsumer(consumer, "groupId", "topic-service1");
+  // await callConsumer(consumer, "topic-service1");
   app.listen(3000);
 };
 
