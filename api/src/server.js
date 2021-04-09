@@ -1,6 +1,5 @@
 import nanoexpress from "nanoexpress";
-import { Kafka, logLevel } from "kafkajs";
-import { callProducer, callConsumer } from "./kafka.js";
+import { Kafka, logLevel, CompressionTypes } from "kafkajs";
 
 const kafka = new Kafka({
   clientId: "kafka-services",
@@ -19,10 +18,6 @@ const producer = kafka.producer({
   allowAutoTopicCreation: true,
 });
 
-const consumer = kafka.consumer({
-  groupId: "api-node", // must be unique group id within the cluster
-});
-
 const app = nanoexpress();
 
 app.get("/", (req, res) => {
@@ -30,9 +25,8 @@ app.get("/", (req, res) => {
 });
 
 app.post("/produce-service1", async (req, res) => {
-  const topic = req.body.topic || "topic-service1";
-
-  await callProducer(req.producer, topic, [
+  const topic = "topic-service1";
+  const messages = [
     {
       value: JSON.stringify({
         success: true,
@@ -49,14 +43,21 @@ app.post("/produce-service1", async (req, res) => {
         origin: 9988,
       }),
     },
-  ]);
+  ];
+
+  await producer.connect();
+
+  await producer.send({
+    topic: topic,
+    timeout: 30000, // ms
+    compression: CompressionTypes.GZIP,
+    messages: messages,
+  });
+
+  await producer.disconnect();
 
   return res.send({ message: "Called producer for service 1" });
 });
 
-const run = async () => {
-  // await callConsumer(consumer, "topic-service1");
-  app.listen(3000);
-};
-
+const run = async () => app.listen(3000);
 run().catch(console.error);
