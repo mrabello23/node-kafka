@@ -37,7 +37,7 @@ const callProducer = (topic, messages) => {
   await producer.disconnect();
 };
 
-const callConsumer = (groupId, topic, disconnect, callback) => {
+const callConsumer = (groupId, topic, callback) => {
   const consumer = kafka.consumer({
     groupId: groupId // must be unique group id within the cluster
   });
@@ -89,13 +89,6 @@ const callConsumer = (groupId, topic, disconnect, callback) => {
       }
     }
   });
-
-  if(disconnect.allow) {
-    setTimeout(
-      async () => await consumer.disconnect(),
-      disconnect.time
-    );
-  }
 };
 
 const fetchPausedTopics = (consumer) => {

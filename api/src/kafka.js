@@ -2,13 +2,13 @@ import { Kafka, logLevel, CompressionTypes } from "kafkajs";
 
 const kafka = new Kafka({
   clientId: "kafka-services",
-  brokers: ["kafka:29092"], // KAFKA_ADVERTISED_HOSTNAME
+  brokers: ["localhost:29092"], // KAFKA_ADVERTISED_HOSTNAME
   connectionTimeout: 3000, // ms
   requestTimeout: 25000, // ms
   retry: {
     initialRetryTime: 300, // ms
     maxRetryTime: 30000, // ms
-    retries: 5
+    retries: 10,
   },
   logLevel: logLevel.INFO,
   // ssl: {
@@ -21,89 +21,74 @@ const kafka = new Kafka({
   // },
 });
 
-const callProducer = (topic, messages) => {
+const producerExecute = async (topic, message) => {
   const producer = kafka.producer({
-    allowAutoTopicCreation: true
+    allowAutoTopicCreation: true,
   });
 
   await producer.connect();
+
   await producer.send({
     topic: topic,
     timeout: 30000, // ms
     compression: CompressionTypes.GZIP,
-    messages: messages
+    messages: message,
   });
 
   await producer.disconnect();
 };
 
-const callConsumer = (groupId, topic, disconnect, callback) => {
+const consumerExecute = async (groupId, topic, callback) => {
   const consumer = kafka.consumer({
-    groupId: groupId // must be unique group id within the cluster
+    groupId: groupId, // must be unique group id within the cluster
   });
 
   await consumer.connect({
     retry: 5,
     readUncommitted: false,
     allowAutoTopicCreation: true,
-    sessionTimeout: 3000 // ms
+    sessionTimeout: 3000, // ms
   });
 
   await consumer.subscribe({
     topic: topic,
-    fromBeginning: true
+    fromBeginning: true,
   });
 
   await consumer.run({
     partitionsConsumedConcurrently: 2, // will be called up to 2 times concurrently
     autoCommitInterval: 1500, // commit offsets after a given period in milliseconds (ms)
     autoCommitThreshold: 100, // commit offsets after resolving a given number of messages
-    eachMessage: async ({topic, partition, message}) => {
+    eachMessage: async ({ topic, partition, message }) => {
       try {
         console.log("topic", topic);
-        console.log("message", {
-          key: message.key.toString(),
-          value: message.value.toString(),
-          headers: message.headers,
-        });
+        console.log("partition", partition);
 
-        /**
-         * TO DO Consumer scripts implementation
-        */
-       if(callback) callback();
-      } catch(e) {
+        if (callback) callback({ topic, partition, message });
+      } catch (e) {
         if (e instanceof TooManyRequestsError) {
           // Other partitions will keep fetching and processing,
           // until if / when they also get throttled
-          consumer.pause([
-            { topic, partitions: [partition] }
-          ]);
+          consumer.pause([{ topic, partitions: [partition] }]);
 
           setTimeout(() => {
             // Other partitions that are paused will continue to be paused
-            consumer.resume([{ topic, partitions: [partition] }])
+            consumer.resume([{ topic, partitions: [partition] }]);
           }, e.retryAfter * 1000);
         }
 
         throw e;
       }
-    }
+    },
   });
-
-  if(disconnect.allow) {
-    setTimeout(
-      async () => await consumer.disconnect(),
-      disconnect.time
-    );
-  }
 };
 
-const fetchPausedTopics = (consumer) => {
+const fetchPausedTopics = async (consumer) => {
   await consumer.connect({
     retry: 5,
     readUncommitted: false,
     allowAutoTopicCreation: true,
-    sessionTimeout: 3000 // ms
+    sessionTimeout: 3000, // ms
   });
 
   const pausedTopicPartitions = consumer.paused();
@@ -114,4 +99,4 @@ const fetchPausedTopics = (consumer) => {
   }
 };
 
-export default { callProducer, callConsumer, fetchPausedTopics };
+export { producerExecute, consumerExecute, fetchPausedTopics };
